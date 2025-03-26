@@ -328,8 +328,14 @@ def main():
 
     # メールアドレスで顧客情報を検索するフォーム
     st.subheader("顧客情報を検索")
-    search_email = st.text_input("メールアドレスを入力してください")
-    if st.button("検索"):
+
+    #セッション情報からメールアドレスを取得
+    if st.session_state.get("authentication_status"):
+        search_email = st.text_input("メールアドレスを入力してください", value = st.session_state.get("email")) #セッション情報を初期値に設定
+    else:
+        search_email = st.text_input("メールアドレスを入力してください")
+
+    if st.button("検索") or (st.session_state.get("authentication_status") and st.session_state.get("email")): #ログイン時、自動検索
         if search_email:
             customer_info = get_customer_info(search_email)
             if customer_info:
@@ -346,6 +352,10 @@ def main():
                 st.write("顧客情報が見つかりませんでした。")
         else:
             st.write("メールアドレスを入力してください。")
+            
+    #セッション情報の初期化
+    if st.session_state.get("authentication_status"):
+        st.session_state["email"]= None
 
 if __name__ == "__main__":
     main()
