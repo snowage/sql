@@ -196,7 +196,7 @@ def main():
                     st.subheader("製品選択")
                     st.text("現在ご使用中のエアコンは" +  str(kw_size_trans(rated_cooling_capacity)) + "畳用です")
                     st.image("model.png")
-                    model = st.radio("",("S224ATES-W(6畳用)", "S254ATES-W(8畳用)", "S284ATES-W(10畳用)"))
+                    model = st.radio("ご希望の方式を選択してください",("S224ATES-W(6畳用)", "S254ATES-W(8畳用)", "S284ATES-W(10畳用)"))
                     model = model.split("(")[0]
 
                     price = list[list["型番"] == model]["機器販売価格"].iloc[0]
@@ -295,7 +295,7 @@ def main():
     else:
         search_email = st.text_input("メールアドレスを入力してください")
 
-    if st.button("検索") or (st.session_state.get("authentication_status") and st.session_state.get("email")): #ログイン時、自動検索
+    if st.button("検索") or (st.session_state.get("authentication_status") and st.session_0.session_state.get("email")): #ログイン時、自動検索
         if search_email:
             customer_info = db_manager.get_customer_info(search_email) # DatabaseManager のget_customer_infoを使用
             if customer_info:
