@@ -1,0 +1,22 @@
+credentials:
+  usernames:
+    AbeToshiko:
+      name: 阿部敏子
+      password: Tech0 # To be replaced with hashed password
+      zip_code: 1058527
+      address: 東京都港区海岸1-5-20
+      phone_number: 0333449100
+      email: abetoshiko@example.com
+      customer_number: 12345678901
+    ChunichiDragons:
+      name: 中日ドラゴンズ
+      password: Tech0 # To be replaced with hashed password
+      zip_code: 4610047
+      address: 愛知県名古屋市東区大幸南1-1-1
+      phone_number: 0527192121
+      email: chunichidragons@example.com
+      customer_number: 19876543210
+cookie:
+  expiry_days: 30
+  key: random_signature_key # Must be string
+  name: random_cookie_name
