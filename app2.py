@@ -10,7 +10,8 @@ import requests
 import streamlit_authenticator as stauth
 import yaml
 from yaml.loader import SafeLoader
-from database import DatabaseManager
+import sqlite3
+import os  # osモジュールをインポート
 
 # 製品リスト読み込み
 list = pd.read_csv("list.csv")
@@ -124,12 +125,75 @@ def get_address(zip_code):
   address = data["address1"] + data["address2"] + data["address3"]
   return address
 
+# SQLite3データベースを初期化し、テーブルを作成する関数
+def init_db():
+    try:
+        conn = sqlite3.connect("customer_info.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS customers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                model_number TEXT,
+                manufacture_year INTEGER,
+                zip_code TEXT,
+                address TEXT,
+                name TEXT,
+                phone_number TEXT,
+                email TEXT UNIQUE,
+                customer_number TEXT
+            )
+        """)
+        conn.commit()
+        conn.close()
+        st.success("データベースの初期化に成功しました。") #成功時のメッセージを表示
+    except sqlite3.Error as e:
+        st.error(f"データベースエラー: {e}") #データベースエラーを表示
+    except Exception as e:
+        st.error(f"予期せぬエラー: {e}") #エラーが発生した場合表示
+
+# 顧客情報をデータベースに登録する関数
+def add_customer_info(model_number, manufacture_year, zip_code, address, name, phone_number, email, customer_number):
+    try:
+        conn = sqlite3.connect("customer_info.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO customers (model_number, manufacture_year, zip_code, address, name, phone_number, email, customer_number)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (model_number, manufacture_year, zip_code, address, name, phone_number, email, customer_number))
+        conn.commit()
+        conn.close()
+        st.success("顧客情報を登録しました。") # 成功時のメッセージを表示
+    except sqlite3.Error as e:
+        st.error(f"データベースエラー: {e}") #データベースエラーを表示
+    except Exception as e:
+        st.error(f"予期せぬエラー: {e}") #エラーが発生した場合表示
+
+# メールアドレスで顧客情報を検索する関数
+def get_customer_info(email):
+    conn = sqlite3.connect("customer_info.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM customers WHERE email = ?", (email,))
+    row = cursor.fetchone()
+    conn.close()
+    if row:
+        return {
+            "model_number": row[1],
+            "manufacture_year": row[2],
+            "zip_code": row[3],
+            "address": row[4],
+            "name": row[5],
+            "phone_number": row[6],
+            "email": row[7],
+            "customer_number": row[8]
+        }
+    return None
+
 # 以下streamlitの出力
 def main():
     st.title("エアコン補助金・見積自動判定")
 
     # データベースの初期化
-    db_manager = DatabaseManager("customer_info.db")  # DatabaseManager のインスタンスを作成
+    init_db()
 
     # Gemini モデルをセッションステートに保存 (初回のみロード)
     if "gemini_model" not in st.session_state:
@@ -278,13 +342,16 @@ def main():
                             
                             if st.button("顧客情報を登録"):
                                 # 顧客情報をデータベースに登録
-                                db_manager.add_customer_info(model, manufacture_year, zip_code, address, name, phone_number, email, customer_number)
-                                st.success("顧客情報を登録しました。")
+                                try:
+                                    add_customer_info(model, manufacture_year, zip_code, address, name, phone_number, email, customer_number)
+                                except Exception as e:
+                                    st.error(f"顧客情報の登録中にエラーが発生しました: {e}")
 
             else:
                 st.error("Gemini モデルの初期化に失敗しました。")
         else:
             st.error("Gemini モデルの初期化に失敗しました。")
+
 
     # メールアドレスで顧客情報を検索するフォーム
     st.subheader("顧客情報を検索")
@@ -297,7 +364,7 @@ def main():
 
     if st.button("検索") or st.session_state.get("email"): #ログイン時、自動検索
         if search_email:
-            customer_info = db_manager.get_customer_info(search_email) # DatabaseManager のget_customer_infoを使用
+            customer_info = get_customer_info(search_email)
             if customer_info:
                 st.write("### 顧客情報")
                 st.write(f"型番: {customer_info['model_number']}") #sqlite3のRow型を辞書ライクにアクセス
