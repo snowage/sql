@@ -144,29 +144,45 @@ def init_db():
     conn.commit()
     conn.close()
 
-# 顧客情報をデータベースに挿入する関数
+# 顧客情報をデータベースに挿入する関数 (接続を確実に閉じるように修正)
 def add_customer_info(model_number, manufacture_year, zip_code, address, name, phone_number, email, customer_number):
-    conn = sqlite3.connect("customer_info.db")
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO customers (model_number, manufacture_year, zip_code, address, name, phone_number, email, customer_number)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    """, (model_number, manufacture_year, zip_code, address, name, phone_number, email, customer_number))
-    conn.commit()
-    conn.close()
+    conn = None
+    try:
+        conn = sqlite3.connect("customer_info.db")
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO customers (model_number, manufacture_year, zip_code, address, name, phone_number, email, customer_number)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """, (model_number, manufacture_year, zip_code, address, name, phone_number, email, customer_number))
+        conn.commit()
+    except sqlite3.Error as e:
+        st.error(f"データベースエラー: {e}")
+    finally:
+        if conn:
+            conn.close()
 
-# メールアドレスをキーに顧客情報を検索する関数
+# メールアドレスをキーに顧客情報を検索する関数 (接続を確実に閉じるように修正)
 def get_customer_info(email):
-    conn = sqlite3.connect("customer_info.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM customers WHERE email = ?", (email,))
-    customer_info = cursor.fetchone()
-    conn.close()
-    return customer_info
+    conn = None
+    try:
+        conn = sqlite3.connect("customer_info.db")
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM customers WHERE email = ?", (email,))
+        customer_info = cursor.fetchone()
+        return customer_info
+    except sqlite3.Error as e:
+        st.error(f"データベースエラー: {e}")
+        return None
+    finally:
+        if conn:
+            conn.close()
 
 # 以下streamlitの出力
 def main():
     st.title("エアコン補助金・見積自動判定")
+
+    # データベースの初期化
+    init_db()
 
     # Gemini モデルをセッションステートに保存 (初回のみロード)
     if "gemini_model" not in st.session_state:
@@ -309,7 +325,7 @@ def main():
                 st.error("Gemini モデルの初期化に失敗しました。")
         else:
             st.error("Gemini モデルの初期化に失敗しました。")
-            
+
     # メールアドレスで顧客情報を検索するフォーム
     st.subheader("顧客情報を検索")
     search_email = st.text_input("メールアドレスを入力してください")
