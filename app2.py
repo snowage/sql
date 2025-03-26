@@ -10,7 +10,7 @@ import requests
 import streamlit_authenticator as stauth
 import yaml
 from yaml.loader import SafeLoader
-import sqlite3
+from database import DatabaseManager
 
 # 製品リスト読み込み
 list = pd.read_csv("list.csv")
@@ -124,65 +124,12 @@ def get_address(zip_code):
   address = data["address1"] + data["address2"] + data["address3"]
   return address
 
-# SQLiteデータベースを初期化する関数
-def init_db():
-    conn = sqlite3.connect("customer_info.db")
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS customers (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            model_number TEXT,
-            manufacture_year INTEGER,
-            zip_code TEXT,
-            address TEXT,
-            name TEXT,
-            phone_number TEXT,
-            email TEXT,
-            customer_number TEXT
-        )
-    """)
-    conn.commit()
-    conn.close()
-
-# 顧客情報をデータベースに挿入する関数 (接続を確実に閉じるように修正)
-def add_customer_info(model_number, manufacture_year, zip_code, address, name, phone_number, email, customer_number):
-    conn = None
-    try:
-        conn = sqlite3.connect("customer_info.db")
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO customers (model_number, manufacture_year, zip_code, address, name, phone_number, email, customer_number)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        """, (model_number, manufacture_year, zip_code, address, name, phone_number, email, customer_number))
-        conn.commit()
-    except sqlite3.Error as e:
-        st.error(f"データベースエラー: {e}")
-    finally:
-        if conn:
-            conn.close()
-
-# メールアドレスをキーに顧客情報を検索する関数 (接続を確実に閉じるように修正)
-def get_customer_info(email):
-    conn = None
-    try:
-        conn = sqlite3.connect("customer_info.db")
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM customers WHERE email = ?", (email,))
-        customer_info = cursor.fetchone()
-        return customer_info
-    except sqlite3.Error as e:
-        st.error(f"データベースエラー: {e}")
-        return None
-    finally:
-        if conn:
-            conn.close()
-
 # 以下streamlitの出力
 def main():
     st.title("エアコン補助金・見積自動判定")
 
     # データベースの初期化
-    init_db()
+    db_manager = DatabaseManager("customer_info.db")  # DatabaseManager のインスタンスを作成
 
     # Gemini モデルをセッションステートに保存 (初回のみロード)
     if "gemini_model" not in st.session_state:
@@ -219,15 +166,21 @@ def main():
                 }
                 df = pd.DataFrame(df_data)
                 st.subheader("エアコン情報")
-                st.dataframe(df)                
+                st.dataframe(df)
 
                 # 定格能力(冷房)を数値に変換
                 rated_cooling_capacity = extracted_info.get("定格能力(冷房)")
-                rated_cooling_capacity = float(re.match(r'[^+\-\d]*([+-]?\d+([.,]\d+)?).*', rated_cooling_capacity)[1])
+                if rated_cooling_capacity :
+                    rated_cooling_capacity = float(re.match(r'[^+\-\d]*([+-]?\d+([.,]\d+)?).*', rated_cooling_capacity)[1])
+                else :
+                    rated_cooling_capacity =0 #適切な数値を入れるように変更する必要あり
 
                 # 製造年を数値に変換し、製造後経過年数を算出
                 manufacture_year = extracted_info.get("製造年")
-                manufacture_year = int(re.match(r'[^+\-\d]*([+-]?\d+([.,]\d+)?).*', manufacture_year)[1])
+                if manufacture_year:
+                    manufacture_year = int(re.match(r'[^+\-\d]*([+-]?\d+([.,]\d+)?).*', manufacture_year)[1])
+                else :
+                    manufacture_year=0 #適切な数値を入れるように変更する必要あり。
                 current_year = datetime.date.today().year
                 years_passed = current_year - manufacture_year
 
@@ -235,7 +188,7 @@ def main():
                     st.text("お客様のエアコンは製造から" + str(years_passed) + "年経過しているため、20,000~70,000ポイント付与されます。")
                 else:
                     st.text("お客様のエアコンは製造から" + str(years_passed) + "年経過しているため、9,000~23,000ポイント付与されます。")
-                
+
 
                 if st.button("製品を選んで、見積もりをする"):
                     st.session_state["flage"] = True
@@ -282,6 +235,7 @@ def main():
                       user_phone_number = config["credentials"]["usernames"][username]["phone_number"] 
                       user_email = config["credentials"]["usernames"][username]["email"]
                       user_customer_number = config["credentials"]["usernames"][username]["customer_number"]
+                      st.session_state["email"]= user_email #検索でメールアドレスで検索するためにセッション情報に保存
                     else:
                       user_zip_code = ""
                       user_address = ""
@@ -321,6 +275,12 @@ def main():
                             st.write("##### 基本工事費：" + str(format(cost, ",")) + "円")
                             st.write("##### 補助金額：" + str(format(subsidy, ",")) + "pt")
                             st.write("### 実質負担額：" + str(format((price + cost - subsidy), ",")) + "円")
+                            
+                            if st.button("顧客情報を登録"):
+                                # 顧客情報をデータベースに登録
+                                db_manager.add_customer_info(model, manufacture_year, zip_code, address, name, phone_number, email, customer_number)
+                                st.success("顧客情報を登録しました。")
+
             else:
                 st.error("Gemini モデルの初期化に失敗しました。")
         else:
@@ -328,26 +288,26 @@ def main():
 
     # メールアドレスで顧客情報を検索するフォーム
     st.subheader("顧客情報を検索")
-
+    
     #セッション情報からメールアドレスを取得
     if st.session_state.get("authentication_status"):
         search_email = st.text_input("メールアドレスを入力してください", value = st.session_state.get("email")) #セッション情報を初期値に設定
     else:
         search_email = st.text_input("メールアドレスを入力してください")
 
-    if st.button("検索") or (st.session_state.get("authentication_status") and st.session_state.get("email")): #ログイン時、自動検索
+    if st.button("検索") or (st.session_state.get("authentication_status") and st.session_0.session_state.get("email")): #ログイン時、自動検索
         if search_email:
-            customer_info = get_customer_info(search_email)
+            customer_info = db_manager.get_customer_info(search_email) # DatabaseManager のget_customer_infoを使用
             if customer_info:
                 st.write("### 顧客情報")
-                st.write(f"型番: {customer_info[1]}")
-                st.write(f"製造年: {customer_info[2]}")
-                st.write(f"郵便番号: {customer_info[3]}")
-                st.write(f"住所: {customer_info[4]}")
-                st.write(f"名前: {customer_info[5]}")
-                st.write(f"電話番号: {customer_info[6]}")
-                st.write(f"メールアドレス: {customer_info[7]}")
-                st.write(f"顧客番号: {customer_info[8]}")
+                st.write(f"型番: {customer_info['model_number']}") #sqlite3のRow型を辞書ライクにアクセス
+                st.write(f"製造年: {customer_info['manufacture_year']}")
+                st.write(f"郵便番号: {customer_info['zip_code']}")
+                st.write(f"住所: {customer_info['address']}")
+                st.write(f"名前: {customer_info['name']}")
+                st.write(f"電話番号: {customer_info['phone_number']}")
+                st.write(f"メールアドレス: {customer_info['email']}")
+                st.write(f"顧客番号: {customer_info['customer_number']}")
             else:
                 st.write("顧客情報が見つかりませんでした。")
         else:
