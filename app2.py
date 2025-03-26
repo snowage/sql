@@ -295,7 +295,7 @@ def main():
     else:
         search_email = st.text_input("メールアドレスを入力してください")
 
-    if st.button("検索") or (st.session_state.get("authentication_status") and st.session_state.get("email")): #ログイン時、自動検索
+    if st.button("検索") or (st.session_state.get("email")): #ログイン時、自動検索
         if search_email:
             customer_info = db_manager.get_customer_info(search_email) # DatabaseManager のget_customer_infoを使用
             if customer_info:
@@ -313,9 +313,9 @@ def main():
         else:
             st.write("メールアドレスを入力してください。")
             
-    #セッション情報の初期化
-    if st.session_state.get("authentication_status"):
-        st.session_state["email"]= None
+    # #セッション情報の初期化
+    # if st.session_state.get("authentication_status"):
+    #     st.session_state["email"]= None
 
 if __name__ == "__main__":
     main()
